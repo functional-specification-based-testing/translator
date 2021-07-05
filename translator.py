@@ -205,12 +205,19 @@ class Translator:
 
     def translate_confirmation_msg(self, rq: List[object]) -> str:
         """translate SLE-0172"""
+        if rq[0] == "CancelOrderRq":
+            order_status = "A"
+        elif self.remaining_qty[rq[3]] == 0:
+            order_status = "X"
+        else:
+            order_status = " "
+
         return "".join([
             "%15d=" % rq[3],
             "0172",
             self.date,
             "%06d" % rq[3],  # HON
-            " ",  # status FIXME
+            order_status,  # status
             str(self.security_id).ljust(12),
             "%012d" % rq[7],  # qty
             {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq[8], " "),  # side
