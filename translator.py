@@ -1,5 +1,9 @@
 import json
+from collections import namedtuple
 from typing import List, Tuple, Dict
+
+
+Trade = namedtuple("Trade", ["price", "qty", "buy_id", "sell_id"])
 
 
 class Translator:
@@ -54,11 +58,11 @@ class Translator:
         else:
             raise ValueError(rq[0])
 
-    def translate_trade(self, trade: List[object]) -> List[str]:
+    def translate_trade(self, trade: Trade) -> List[str]:
         self.update_order_book_view_by_trade(trade)
         return [
-            self.translate_execution_notice(trade, self.orders[trade[3]]),
-            self.translate_execution_notice(trade, self.orders[trade[4]]),
+            self.translate_execution_notice(trade, self.orders[trade.buy_id]),
+            self.translate_execution_notice(trade, self.orders[trade.sell_id]),
         ]
 
     def update_order_book_view_by_order(self, rq: List[object]) -> None:
@@ -69,16 +73,16 @@ class Translator:
         self.orders[rq[3]] = rq
         self.remaining_qty[rq[3]] = rq[7]
 
-    def update_order_book_view_by_trade(self, trade: List[object]) -> None:
-        assert trade[3] in self.remaining_qty, "trade buy order (%s) not in order book view" % trade[3]
-        assert trade[4] in self.remaining_qty, "trade sell order (%s) not in order book view" % trade[3]
-        assert trade[2] <= self.remaining_qty[trade[3]] and trade[2] <= self.remaining_qty[trade[4]], "not enough qty in order book view"
+    def update_order_book_view_by_trade(self, trade: Trade) -> None:
+        assert trade.buy_id in self.remaining_qty, "trade buy order (%s) not in order book view" % trade.buy_id
+        assert trade.sell_id in self.remaining_qty, "trade sell order (%s) not in order book view" % trade.sell_id
+        assert trade.qty <= self.remaining_qty[trade.buy_id] and trade.qty <= self.remaining_qty[trade.sell_id], "not enough qty in order book view"
 
         self.trade_cnt += 1
-        self.remaining_qty[trade[3]] -= trade[2]
-        self.remaining_qty[trade[4]] -= trade[2]
+        self.remaining_qty[trade.buy_id] -= trade.qty
+        self.remaining_qty[trade.sell_id] -= trade.qty
 
-    def translate_new_order_cmd(self, rq: List[object], rs: List[object], trades: List[List[object]]) -> Tuple[str, List[str]]:
+    def translate_new_order_cmd(self, rq: List[object], rs: List[object], trades: List[Trade]) -> Tuple[str, List[str]]:
         order = self.translate_order(rq)
         translated_trades = []
         if rs[1]:
@@ -121,6 +125,7 @@ class Translator:
                     assert trades_count_msg[0] == "Trades", "line " + str(rs_idx+request_count+2) + " Trades count should be declared after OrderRq but " + trades_count_msg[0]
                     trades_count = trades_count_msg[1]
                     trades = haskell_res[rs_idx: rs_idx+trades_count]
+                    trades = list(map(lambda trade: Trade(*trade[1:]), trades))
                     rs_idx += trades_count
                     
                     feed, results = self.translate_new_order_cmd(rq, rs, trades)
@@ -249,7 +254,7 @@ class Translator:
             ("%s%s" % (self.date, self.time)).ljust(20, "0"),
         ])
 
-    def translate_execution_notice(self, trade: List[object], rq: List[str]) -> str:
+    def translate_execution_notice(self, trade: Trade, rq: List[str]) -> str:
         """translate SLE-0105"""
         return "".join([
             "%15d=" % rq[3],
@@ -259,8 +264,8 @@ class Translator:
             str(self.security_id).ljust(12),
             str(self.group).ljust(2),
             {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq[8], " "),  # side
-            "%012d" % trade[2],
-            self.translate_price_to_mmtp(trade[1]),  # price
+            "%012d" % trade.qty,
+            self.translate_price_to_mmtp(trade.price),  # price
             ["0", "1"][self.remaining_qty[rq[3]] > 0],  # remaining qty flag
             "%012d" % self.remaining_qty[rq[3]],  # remaining qty
             "%8s" % "",  # counterpart broker
