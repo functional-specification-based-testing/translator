@@ -1,23 +1,32 @@
 import json
-from collections import namedtuple
 from typing import List, Tuple, Dict
+from dataclasses import dataclass
 
 
-Trade = namedtuple("Trade", ["price", "qty", "buy_id", "sell_id"])
-OrderRq = namedtuple("OrderRq", [
-    "order_request_type",
-    "old_id",
-    "order_type",
-    "id",
-    "broker",
-    "shareholder",
-    "price",
-    "qty",
-    "side",
-    "min_qty",
-    "fak",
-    "disclodes_qty",
-])
+@dataclass
+class Trade:
+    """Trade DTO"""
+    price: float
+    qty: int
+    buy_id: str
+    sell_id: str
+
+
+@dataclass
+class OrderRq:
+    """Order Request DTO"""
+    order_request_type: str
+    old_id: str
+    order_type: str
+    id: str
+    broker: str
+    shareholder: str
+    price: float
+    qty: int
+    side: str
+    min_qty: int
+    fak: bool
+    disclodes_qty: int
 
 
 class Translator:
