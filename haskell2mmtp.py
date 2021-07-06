@@ -9,11 +9,14 @@ from translator import Translator
 
 def preprocess(lines: List[str]) -> List[List[object]]:
     def convert_type(itm: str):
+        itm = itm.strip()
         try:
             return int(itm)
         except ValueError:
             pass
-        if itm.lower() in {"true", "fak", "accepted"}:
+        if itm == "":
+            return None
+        elif itm.lower() in {"true", "fak", "accepted"}:
             return True
         elif itm.lower() in {"false", "---", "rejected"}:
             return False

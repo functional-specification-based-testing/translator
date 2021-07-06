@@ -1,6 +1,6 @@
 import json
 from typing import List, Tuple, Dict
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 
 @dataclass
@@ -114,6 +114,7 @@ class Translator:
 
     def translate_new_order_cmd(self, rq: OrderRq, rs: List[object], trades: List[Trade]) -> Tuple[str, List[str]]:
         order = self.translate_order(rq)
+        print(asdict(rq))
         translated_trades = []
         if rs[1]:
             self.update_order_book_view_by_order(rq)
