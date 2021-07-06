@@ -4,6 +4,20 @@ from typing import List, Tuple, Dict
 
 
 Trade = namedtuple("Trade", ["price", "qty", "buy_id", "sell_id"])
+OrderRq = namedtuple("OrderRq", [
+    "order_request_type",
+    "old_id",
+    "order_type",
+    "id",
+    "broker",
+    "shareholder",
+    "price",
+    "qty",
+    "side",
+    "min_qty",
+    "fak",
+    "disclodes_qty",
+])
 
 
 class Translator:
@@ -65,13 +79,13 @@ class Translator:
             self.translate_execution_notice(trade, self.orders[trade.sell_id]),
         ]
 
-    def update_order_book_view_by_order(self, rq: List[object]) -> None:
-        if rq[0] == "NewOrderRq":
-            assert rq[3] not in self.orders, "order %s already in order book view" % rq[3]
-            assert rq[3] not in self.remaining_qty, "order %s already in order book view" % rq[3]
+    def update_order_book_view_by_order(self, rq: OrderRq) -> None:
+        if rq.order_request_type == "NewOrderRq":
+            assert rq.id not in self.orders, "order %s already in order book view" % rq.id
+            assert rq.id not in self.remaining_qty, "order %s already in order book view" % rq.id
         
-        self.orders[rq[3]] = rq
-        self.remaining_qty[rq[3]] = rq[7]
+        self.orders[rq.id] = rq
+        self.remaining_qty[rq.id] = rq.qty
 
     def update_order_book_view_by_trade(self, trade: Trade) -> None:
         assert trade.buy_id in self.remaining_qty, "trade buy order (%s) not in order book view" % trade.buy_id
@@ -82,7 +96,7 @@ class Translator:
         self.remaining_qty[trade.buy_id] -= trade.qty
         self.remaining_qty[trade.sell_id] -= trade.qty
 
-    def translate_new_order_cmd(self, rq: List[object], rs: List[object], trades: List[Trade]) -> Tuple[str, List[str]]:
+    def translate_new_order_cmd(self, rq: OrderRq, rs: List[object], trades: List[Trade]) -> Tuple[str, List[str]]:
         order = self.translate_order(rq)
         translated_trades = []
         if rs[1]:
@@ -92,7 +106,7 @@ class Translator:
             result = self.translate_confirmation_msg(rq)
         else:
             result = self.translate_rejection_msg(rq)
-            assert not trades, "trades on rejected order %s" % rq[3]
+            assert not trades, "trades on rejected order %s" % rq.id
         return order, [result] + translated_trades
 
     def translate(self, request_count: int, haskell: List[List[object]]) -> Tuple[List[str], List[str]]:
@@ -120,6 +134,7 @@ class Translator:
             
             else:
                 if rq[0] == "NewOrderRq":
+                    order_rq = OrderRq(*rq)
                     trades_count_msg = haskell_res[rs_idx]
                     rs_idx += 1
                     assert trades_count_msg[0] == "Trades", "line " + str(rs_idx+request_count+2) + " Trades count should be declared after OrderRq but " + trades_count_msg[0]
@@ -128,7 +143,7 @@ class Translator:
                     trades = list(map(lambda trade: Trade(*trade[1:]), trades))
                     rs_idx += trades_count
                     
-                    feed, results = self.translate_new_order_cmd(rq, rs, trades)
+                    feed, results = self.translate_new_order_cmd(order_rq, rs, trades)
                     translated_feed.append(feed)
                     translated_result += results
         
@@ -166,23 +181,23 @@ class Translator:
         """translate "Set Credit" Admin Command to set credit of brokers"""
         return "POST CM broker=%s credit=%s" % tuple(rq[1:]), ""
 
-    def translate_order(self, rq: List[object]) -> str:
+    def translate_order(self, rq: OrderRq) -> str:
         """translate SLE-0001 & SLE-0002"""
         return "".join([
-            "%15d=" % rq[3],
-            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq[0], "0000"),
+            "%15d=" % rq.id,
+            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq.order_request_type, "0000"),
             self.date,  # original order date
             "%06d" % 0,  # HON FIXME for replace
             str(self.security_id).ljust(12),
-            {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq[8], " "),  # side
-            "%012d" % rq[7],  # qty
-            {"Limit": "L", "Iceberg": "L"}.get(rq[2], " "),  # type
-            self.translate_price_to_mmtp(rq[6]),  # price
-            {True: "E", False: "J"}.get(rq[10], " "),  # validity type
+            {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq.side, " "),  # side
+            "%012d" % rq.qty,  # qty
+            {"Limit": "L", "Iceberg": "L"}.get(rq.order_type, " "),  # type
+            self.translate_price_to_mmtp(rq.price),  # price
+            {True: "E", False: "J"}.get(rq.fak, " "),  # validity type
             "%08d" % 0,  # validity date
-            "%012d" % rq[9],  # min qty
-            "%012d" % (rq[11] if rq[2] == "Iceberg" else 0),  # disclosed qty
-            str(rq[4]).ljust(8),  # broker
+            "%012d" % rq.min_qty,  # min qty
+            "%012d" % (rq.disclodes_qty if rq.order_type == "Iceberg" else 0),  # disclosed qty
+            str(rq.broker).ljust(8),  # broker
             "A",  # technical origin
             "0",  # confirmation flag
             "0",  # preopening flag
@@ -190,7 +205,7 @@ class Translator:
             "%6s" % "",
             "%012d" % 0,  # expected remaining qty FIXME for replace
             " 189980021",
-            str(rq[5]).ljust(16),  # shareholder
+            str(rq.shareholder).ljust(16),  # shareholder
             "1       ",
             self.date,
             self.time,
@@ -198,54 +213,54 @@ class Translator:
             "%26s" % "",
         ])
 
-    def translate_rejection_msg(self, rq: List[object]) -> str:
+    def translate_rejection_msg(self, rq: OrderRq) -> str:
         """translate SLE-0144"""
         return "".join([
-            "%15d=" % rq[3],
+            "%15d=" % rq.id,
             "0144",
-            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq[0], "0000"),
+            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq.order_request_type, "0000"),
             "%06d" % 0,
             "".ljust(71),
         ])
 
-    def translate_confirmation_msg(self, rq: List[object]) -> str:
+    def translate_confirmation_msg(self, rq: OrderRq) -> str:
         """translate SLE-0172"""
-        if rq[0] == "CancelOrderRq":
+        if rq.order_request_type == "CancelOrderRq":
             order_status = "A"
-        elif self.remaining_qty[rq[3]] == 0:
+        elif self.remaining_qty[rq.id] == 0:
             order_status = "X"
         else:
             order_status = " "
 
         return "".join([
-            "%15d=" % rq[3],
+            "%15d=" % rq.id,
             "0172",
             self.date,
-            "%06d" % rq[3],  # HON
+            "%06d" % rq.id,  # HON
             order_status,  # status
             str(self.security_id).ljust(12),
-            "%012d" % rq[7],  # qty
-            {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq[8], " "),  # side
-            self.translate_price_to_mmtp(rq[6]),  # price
-            str(rq[4]).ljust(8),  # broker
+            "%012d" % rq.qty,  # qty
+            {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq.side, " "),  # side
+            self.translate_price_to_mmtp(rq.price),  # price
+            str(rq.broker).ljust(8),  # broker
             "%06d" % 0,
             self.time,
-            {"Limit": "L", "Iceberg": "L"}.get(rq[2], " "),  # type
-            "%012d" % (rq[7] - self.remaining_qty[rq[3]]),  # matched qty at entry
-            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq[0], "0000"),  # original HON
-            {"NewOrderRq": "%08d" % 0, "ReplaceOrderRq": self.date}.get(rq[0], "0000"),  # original order date
+            {"Limit": "L", "Iceberg": "L"}.get(rq.order_type, " "),  # type
+            "%012d" % (rq.qty - self.remaining_qty[rq.id]),  # matched qty at entry
+            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq.order_request_type, "0000"),  # original HON
+            {"NewOrderRq": "%08d" % 0, "ReplaceOrderRq": self.date}.get(rq.order_request_type, "0000"),  # original order date
             "%06d" % 0,  # HON FIXME for replace
-            {True: "E", False: "J"}.get(rq[10], " "),  # validity type
+            {True: "E", False: "J"}.get(rq.fak, " "),  # validity type
             "%08d" % 0,  # validity date
-            "%012d" % rq[9],  # min qty
-            "%012d" % (rq[11] if rq[2] == "Iceberg" else 0),  # disclosed qty
+            "%012d" % rq.min_qty,  # min qty
+            "%012d" % (rq.disclodes_qty if rq.order_type == "Iceberg" else 0),  # disclosed qty
             "A",  # technical origin
             "0",  # confirmation flag
-            "%012d" % self.remaining_qty[rq[3]],  # remaining qty
+            "%012d" % self.remaining_qty[rq.id],  # remaining qty
             " %09d" % 0,  # trigger price
             "%06d" % 0,
             " 189980021",
-            str(rq[5]).ljust(16),  # shareholder
+            str(rq.shareholder).ljust(16),  # shareholder
             "1       ",
             self.date,
             self.time,
@@ -254,20 +269,20 @@ class Translator:
             ("%s%s" % (self.date, self.time)).ljust(20, "0"),
         ])
 
-    def translate_execution_notice(self, trade: Trade, rq: List[str]) -> str:
+    def translate_execution_notice(self, trade: Trade, rq: OrderRq) -> str:
         """translate SLE-0105"""
         return "".join([
-            "%15d=" % rq[3],
+            "%15d=" % rq.id,
             "0105",
             self.date,
-            "%06d" % rq[3],  # HON
+            "%06d" % rq.id,  # HON
             str(self.security_id).ljust(12),
             str(self.group).ljust(2),
-            {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq[8], " "),  # side
+            {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq.side, " "),  # side
             "%012d" % trade.qty,
             self.translate_price_to_mmtp(trade.price),  # price
-            ["0", "1"][self.remaining_qty[rq[3]] > 0],  # remaining qty flag
-            "%012d" % self.remaining_qty[rq[3]],  # remaining qty
+            ["0", "1"][self.remaining_qty[rq.id] > 0],  # remaining qty flag
+            "%012d" % self.remaining_qty[rq.id],  # remaining qty
             "%8s" % "",  # counterpart broker
             "1",  # counterpart origin
             "A",  # technical origin
@@ -276,12 +291,12 @@ class Translator:
             self.time,
             "%07d" % self.trade_cnt,  # trade number
             self.date,
-            {"Limit": "L", "Iceberg": "L"}.get(rq[2], " "),  # type
-            {True: "E", False: "J"}.get(rq[10], " "),  # validity type
+            {"Limit": "L", "Iceberg": "L"}.get(rq.order_type, " "),  # type
+            {True: "E", False: "J"}.get(rq.fak, " "),  # validity type
             "A",  # Code of the instrument category
             "%9s" % "",
             "189980021",
-            str(rq[5]).ljust(16),  # shareholder
+            str(rq.shareholder).ljust(16),  # shareholder
             "1       ",
             self.date,
             self.time,
