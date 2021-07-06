@@ -40,8 +40,10 @@ class Translator:
     upper_bound_percentage: float
     src_shareholder_id: str
     trade_cnt: int
+    order_cnt: int
     orders: Dict[str, object]
     remaining_qty: Dict[str, int]
+    sequence_nums: Dict[str, int]
 
     def __init__(
         self,
@@ -63,8 +65,10 @@ class Translator:
         self.upper_bound_percentage = upper_bound_percentage
         self.src_shareholder_id = src_shareholder_id
         self.trade_cnt = 0
+        self.order_cnt = 0
         self.orders = {}
         self.remaining_qty = {}
+        self.sequence_nums = {}
 
     @staticmethod
     def translate_price_to_mmtp(price: float):
@@ -91,9 +95,12 @@ class Translator:
     def update_order_book_view_by_order(self, rq: OrderRq) -> None:
         if rq.order_request_type == "NewOrderRq":
             assert rq.id not in self.orders, "order %s already in order book view" % rq.id
+            assert rq.id not in self.sequence_nums, "order %s already in order book view" % rq.id
             assert rq.id not in self.remaining_qty, "order %s already in order book view" % rq.id
         
         self.orders[rq.id] = rq
+        self.order_cnt += 1
+        self.sequence_nums[rq.id] = self.order_cnt
         self.remaining_qty[rq.id] = rq.qty
 
     def update_order_book_view_by_trade(self, trade: Trade) -> None:
@@ -124,6 +131,9 @@ class Translator:
         translated_feed = []
         translated_result = []
         rs_idx = 0
+
+        translated_feed.append(json.dumps({"command": "Start Session"}))
+
         for i in range(request_count):
             rq = haskell_req[i]
             rs = haskell_res[rs_idx]
@@ -156,6 +166,9 @@ class Translator:
                     translated_feed.append(feed)
                     translated_result += results
         
+        translated_feed.append(json.dumps({"command": "End Session"}))
+        translated_feed.append(json.dumps({"command": "Shutdown"}))
+
         return translated_feed, translated_result
 
     def translate_reference_price_cmd(self, rq: List[object]) -> Tuple[str, str]:
@@ -182,7 +195,7 @@ class Translator:
                 "destinationId": str(rq[1]),
                 "cisin": self.cisin,
                 "quantity": rq[2],
-                "isBlockedStatusIgnored": False,
+                # "isBlockedStatusIgnored": False,
             },
         }), ""
 
@@ -193,7 +206,7 @@ class Translator:
     def translate_order(self, rq: OrderRq) -> str:
         """translate SLE-0001 & SLE-0002"""
         return "".join([
-            "%15d=" % rq.id,
+            ("%d=" % rq.id).ljust(16),
             {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq.order_request_type, "0000"),
             self.date,  # original order date
             "%06d" % 0,  # HON FIXME for replace
@@ -225,7 +238,7 @@ class Translator:
     def translate_rejection_msg(self, rq: OrderRq) -> str:
         """translate SLE-0144"""
         return "".join([
-            "%15d=" % rq.id,
+            ("%d=" % rq.id).ljust(16),
             "0144",
             {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq.order_request_type, "0000"),
             "%06d" % 0,
@@ -242,10 +255,10 @@ class Translator:
             order_status = " "
 
         return "".join([
-            "%15d=" % rq.id,
+            ("%d=" % rq.id).ljust(16),
             "0172",
             self.date,
-            "%06d" % rq.id,  # HON
+            "%06d" % self.sequence_nums[rq.id],  # HON
             order_status,  # status
             str(self.security_id).ljust(12),
             "%012d" % rq.qty,  # qty
@@ -256,16 +269,19 @@ class Translator:
             self.time,
             {"Limit": "L", "Iceberg": "L"}.get(rq.order_type, " "),  # type
             "%012d" % (rq.qty - self.remaining_qty[rq.id]),  # matched qty at entry
-            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq.order_request_type, "0000"),  # original HON
-            {"NewOrderRq": "%08d" % 0, "ReplaceOrderRq": self.date}.get(rq.order_request_type, "0000"),  # original order date
-            "%06d" % 0,  # HON FIXME for replace
+            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq.order_request_type, "0000"),  # original function code
+            {
+                "NewOrderRq": "%8s" % "",  # "%08d" % 0,
+                "ReplaceOrderRq": self.date
+            }.get(rq.order_request_type, "0000"),  # original order date
+            "%06d" % 0,  # original HON FIXME for replace
             {True: "E", False: "J"}.get(rq.fak, " "),  # validity type
             "%08d" % 0,  # validity date
             "%012d" % rq.min_qty,  # min qty
             "%012d" % (rq.disclodes_qty if rq.order_type == "Iceberg" else 0),  # disclosed qty
             "A",  # technical origin
             "0",  # confirmation flag
-            "%012d" % self.remaining_qty[rq.id],  # remaining qty
+            "%012d" % 0,  # self.remaining_qty[rq.id],  # remaining qty
             " %09d" % 0,  # trigger price
             "%06d" % 0,
             " 189980021",
@@ -281,10 +297,10 @@ class Translator:
     def translate_execution_notice(self, trade: Trade, rq: OrderRq) -> str:
         """translate SLE-0105"""
         return "".join([
-            "%15d=" % rq.id,
+            ("%d=" % rq.id).ljust(16),
             "0105",
             self.date,
-            "%06d" % rq.id,  # HON
+            "%06d" % self.sequence_nums[rq.id],  # HON
             str(self.security_id).ljust(12),
             str(self.group).ljust(2),
             {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq.side, " "),  # side

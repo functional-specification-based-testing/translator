@@ -40,11 +40,14 @@ def main():
     haskell_res = preprocess(haskell_res)
     translator = Translator()
     translated_feed, translated_result = translator.translate(request_count, haskell_res)
-    # print(translated_feed)
     translated_feed = list(filter(None, translated_feed))
     translated_result = list(filter(None, translated_result))
     print("\n".join(translated_feed))
     print("\n".join(translated_result))
+    with open("feed.mmtp", "w") as f:
+        print("\n".join(filter(lambda line: not line.startswith("POST"), translated_feed)), file=f)
+    with open("oracle.mmtp", "w") as f:
+        print("\n".join(translated_result), file=f)
 
 
 if __name__ == '__main__':
