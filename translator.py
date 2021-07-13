@@ -48,7 +48,7 @@ class Translator:
     def __init__(
         self,
         security_id: str = "SPY",
-        cisin: str = "SPY",
+        cisin: str = "US78462F1030",
         group: str = "N1",
         date: str = "20191028",
         time: str = "083000",
