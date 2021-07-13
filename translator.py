@@ -166,6 +166,8 @@ class Translator:
                     feed, results = self.translate_new_order_cmd(order_rq, rs, trades)
                     translated_feed.append(feed)
                     translated_result += results
+                else:
+                    raise RuntimeError("Invalid request type '%s'" % rq[0])
         
         translated_feed.append(json.dumps({"command": "End Session"}))
         translated_feed.append(json.dumps({"command": "Shutdown"}))
