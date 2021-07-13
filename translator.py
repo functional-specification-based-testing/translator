@@ -1,6 +1,7 @@
 import json
 from typing import List, Tuple, Dict
 from dataclasses import dataclass, asdict
+from copy import deepcopy
 
 
 @dataclass
@@ -93,6 +94,7 @@ class Translator:
         ]
 
     def update_order_book_view_by_order(self, rq: OrderRq) -> None:
+        assert rq.order_request_type in {"NewOrderRq", "ReplaceOrderRq"}, "Invalid order request type"
         if rq.order_request_type == "NewOrderRq":
             assert rq.id not in self.orders, "order %s already in order book view" % rq.id
             assert rq.id not in self.sequence_nums, "order %s already in order book view" % rq.id
@@ -103,6 +105,16 @@ class Translator:
         self.sequence_nums[rq.id] = self.order_cnt
         self.remaining_qty[rq.id] = rq.qty
 
+    def update_order_book_view_by_cancel_order(self, rq: OrderRq) -> None:
+        assert rq.order_request_type == "CancelOrderRq", "Invalid order request type"
+        assert rq.old_id in self.orders, "old order %s not in order book view" % rq.id
+        assert rq.old_id in self.sequence_nums, "old order %s not in order book view" % rq.id
+        assert rq.old_id in self.remaining_qty, "old order %s not in order book view" % rq.id
+
+        self.orders[rq.id] = rq
+        self.sequence_nums[rq.id] = self.sequence_nums[rq.old_id]
+        self.remaining_qty[rq.id] = self.remaining_qty[rq.old_id]
+
     def update_order_book_view_by_trade(self, trade: Trade) -> None:
         assert trade.buy_id in self.remaining_qty, "trade buy order (%s) not in order book view" % trade.buy_id
         assert trade.sell_id in self.remaining_qty, "trade sell order (%s) not in order book view" % trade.sell_id
@@ -112,7 +124,7 @@ class Translator:
         self.remaining_qty[trade.buy_id] -= trade.qty
         self.remaining_qty[trade.sell_id] -= trade.qty
 
-    def translate_new_order_cmd(self, rq: OrderRq, rs: List[object], trades: List[Trade]) -> Tuple[str, List[str]]:
+    def translate_incoming_order_cmd(self, rq: OrderRq, rs: List[object], trades: List[Trade]) -> Tuple[str, List[str]]:
         order = self.translate_order(rq)
         print(asdict(rq))
         translated_trades = []
@@ -125,6 +137,24 @@ class Translator:
             result = self.translate_rejection_msg(rq)
             assert not trades, "trades on rejected order %s" % rq.id
         return order, [result] + translated_trades
+
+    def translate_cancel_order_cmd(self, rq: OrderRq, rs: List[object]) -> Tuple[str, str]:
+        if rq.old_id in self.orders:
+            new_rq = deepcopy(self.orders[rq.old_id])
+            new_rq.order_request_type = rq.order_request_type
+            new_rq.old_id = rq.old_id
+            new_rq.id = rq.id
+            new_rq.side = rq.side
+            rq = new_rq
+
+        order = self.translate_cancel_order(rq)
+        print(asdict(rq))
+        if rs[1]:
+            self.update_order_book_view_by_cancel_order(rq)
+            result = self.translate_confirmation_msg(rq)
+        else:
+            result = self.translate_rejection_msg(rq)
+        return order, result
 
     def translate(self, request_count: int, haskell: List[List[object]]) -> Tuple[List[str], List[str]]:
         haskell_req = haskell[:request_count]
@@ -153,7 +183,7 @@ class Translator:
                 translated_result.append(result)
             
             else:
-                if rq[0] == "NewOrderRq":
+                if rq[0] in {"NewOrderRq", "ReplaceOrderRq"}:
                     order_rq = OrderRq(*rq)
                     trades_count_msg = haskell_res[rs_idx]
                     rs_idx += 1
@@ -163,9 +193,14 @@ class Translator:
                     trades = list(map(lambda trade: Trade(*trade[1:]), trades))
                     rs_idx += trades_count
                     
-                    feed, results = self.translate_new_order_cmd(order_rq, rs, trades)
+                    feed, results = self.translate_incoming_order_cmd(order_rq, rs, trades)
                     translated_feed.append(feed)
                     translated_result += results
+                elif rq[0] == "CancelOrderRq":
+                    order_rq = OrderRq(*rq, None, None, None)
+                    feed, result = self.translate_cancel_order_cmd(order_rq, rs)
+                    translated_feed.append(feed)
+                    translated_result.append(result)
                 else:
                     raise RuntimeError("Invalid request type '%s'" % rq[0])
         
@@ -212,7 +247,7 @@ class Translator:
             ("%d=" % rq.id).ljust(16),
             {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq.order_request_type, "0000"),
             self.date,  # original order date
-            "%06d" % 0,  # HON FIXME for replace
+            "%06d" % self.sequence_nums.get(rq.old_id, 0),  # original HON
             str(self.security_id).ljust(12),
             {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq.side, " "),  # side
             "%012d" % rq.qty,  # qty
@@ -228,7 +263,7 @@ class Translator:
             "0",  # preopening flag
             " %09d" % 0,  # trigger price
             "%6s" % "",
-            "%012d" % 0,  # expected remaining qty FIXME for replace
+            "%012d" % self.remaining_qty.get(rq.old_id, 0),  # expected remaining qty
             " 189980021",
             str(rq.shareholder).ljust(16),  # shareholder
             "1       ",
@@ -238,12 +273,24 @@ class Translator:
             "%26s" % "",
         ])
 
+    def translate_cancel_order(self, rq: OrderRq) -> str:
+        """translate SLE-0003"""
+        return "".join([
+            ("%d=" % rq.id).ljust(16),
+            {"CancelOrderRq": "0003"}.get(rq.order_request_type, "0000"),
+            self.date,  # original order date
+            "%06d" % self.sequence_nums.get(rq.old_id, 0),  # original HON
+            str(rq.broker if rq.broker else "").ljust(8),  # broker
+            str(self.security_id).ljust(12),
+            {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq.side, " "),  # side
+        ])
+
     def translate_rejection_msg(self, rq: OrderRq) -> str:
         """translate SLE-0144"""
         return "".join([
             ("%d=" % rq.id).ljust(16),
             "0144",
-            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq.order_request_type, "0000"),
+            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002", "CancelOrderRq": "0003"}.get(rq.order_request_type, "0000"),
             "%06d" % 0,
             "".ljust(71),
         ])
@@ -272,19 +319,28 @@ class Translator:
             self.time,
             {"Limit": "L", "Iceberg": "L"}.get(rq.order_type, " "),  # type
             "%012d" % (rq.qty - self.remaining_qty[rq.id]),  # matched qty at entry
-            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002"}.get(rq.order_request_type, "0000"),  # original function code
+            {
+                "NewOrderRq": "0001",
+                "ReplaceOrderRq": "0002",
+                "CancelOrderRq": "0003",
+            }.get(rq.order_request_type, "0000"),  # original function code
             {
                 "NewOrderRq": "%8s" % "",  # "%08d" % 0,
-                "ReplaceOrderRq": self.date
-            }.get(rq.order_request_type, "0000"),  # original order date
-            "%06d" % 0,  # original HON FIXME for replace
+                "ReplaceOrderRq": self.date,
+                "CancelOrderRq": self.date,
+            }.get(rq.order_request_type, "%8s" % ""),  # original order date
+            "%06d" % self.sequence_nums.get(rq.old_id, 0),  # original HON
             {True: "E", False: "J"}.get(rq.fak, " "),  # validity type
             "%08d" % 0,  # validity date
             "%012d" % rq.min_qty,  # min qty
             "%012d" % (rq.disclodes_qty if rq.order_type == "Iceberg" else 0),  # disclosed qty
             "A",  # technical origin
             "0",  # confirmation flag
-            "%012d" % 0,  # self.remaining_qty[rq.id],  # remaining qty
+            "%012d" % {
+                "NewOrderRq": 0,
+                "ReplaceOrderRq": self.remaining_qty.get(rq.old_id, None),
+                "CancelOrderRq": self.remaining_qty.get(rq.old_id, None),
+            }.get(rq.order_request_type, 0),  # original remaining qty
             " %09d" % 0,  # trigger price
             "%06d" % 0,
             " 189980021",
