@@ -257,6 +257,7 @@ class Translator:
 
         supports at most one SetOwnershipRq for each shareholder
         """
+        return "POST PO shareholder=%s shares=%s" % tuple(rq[1:]), ""
         return json.dumps({
             "command": "Transfer Share",
             "transferCommand": {
