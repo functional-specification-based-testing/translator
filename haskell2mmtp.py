@@ -45,8 +45,8 @@ def main():
     translated_feed, translated_result = translator.translate(request_count, haskell_res)
     translated_feed = list(filter(None, translated_feed))
     translated_result = list(filter(None, translated_result))
-    print("\n".join(translated_feed))
-    print("\n".join(translated_result))
+    # print("\n".join(translated_feed))
+    # print("\n".join(translated_result))
     with open("feed.mmtp", "w") as f:
         print("\n".join(filter(lambda line: not line.startswith("POST"), translated_feed)), file=f)
     with open("oracle.mmtp", "w") as f:

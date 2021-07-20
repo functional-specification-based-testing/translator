@@ -1,5 +1,6 @@
 import json
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, DefaultDict
+from collections import defaultdict
 from dataclasses import dataclass, asdict
 from copy import deepcopy
 
@@ -43,7 +44,7 @@ class Translator:
     trade_cnt: int
     order_cnt: int
     orders: Dict[str, object]
-    remaining_qty: Dict[str, int]
+    remaining_qty: DefaultDict[str, int]
     sequence_nums: Dict[str, int]
     eliminated: Dict[str, bool]
 
@@ -69,7 +70,7 @@ class Translator:
         self.trade_cnt = 0
         self.order_cnt = 0
         self.orders = {}
-        self.remaining_qty = {}
+        self.remaining_qty = defaultdict(int)
         self.sequence_nums = {}
         self.eliminated = {}
 
@@ -100,7 +101,6 @@ class Translator:
         if rq.order_request_type == "NewOrderRq":
             assert rq.id not in self.orders, "order %s already in order book view" % rq.id
             assert rq.id not in self.sequence_nums, "order %s already in order book view" % rq.id
-            assert rq.id not in self.remaining_qty, "order %s already in order book view" % rq.id
         
         self.orders[rq.id] = rq
         self.order_cnt += 1
@@ -112,22 +112,19 @@ class Translator:
         assert rq.order_request_type == "CancelOrderRq", "Invalid order request type"
         assert rq.old_id in self.orders, "old order %s not in order book view" % rq.id
         assert rq.old_id in self.sequence_nums, "old order %s not in order book view" % rq.id
-        assert rq.old_id in self.remaining_qty, "old order %s not in order book view" % rq.id
 
         self.orders[rq.id] = rq
         self.sequence_nums[rq.id] = self.sequence_nums[rq.old_id]
         self.remaining_qty[rq.id] = self.remaining_qty[rq.old_id]
 
     def update_order_book_view_by_trade(self, trade: Trade) -> None:
-        assert trade.buy_id in self.remaining_qty, "trade buy order (%s) not in order book view" % trade.buy_id
-        assert trade.sell_id in self.remaining_qty, "trade sell order (%s) not in order book view" % trade.sell_id
         assert trade.qty <= self.remaining_qty[trade.buy_id] and trade.qty <= self.remaining_qty[trade.sell_id], "not enough qty in order book view"
 
         self.trade_cnt += 1
         self.remaining_qty[trade.buy_id] -= trade.qty
         self.remaining_qty[trade.sell_id] -= trade.qty
 
-    def translate_incoming_order_cmd(self, rq: OrderRq, rs: List[object], trades: List[Trade]) -> Tuple[str, List[str]]:
+    def translate_incoming_order_cmd(self, rq: OrderRq, rs: List[object], trades: List[Trade], orderbook: [OrderRq]) -> Tuple[str, List[str]]:
         order = self.translate_order(rq)
         print(asdict(rq))
         translated_trades = []
@@ -137,8 +134,9 @@ class Translator:
             for trade in trades:
                 translated_trades += self.translate_trade(trade)
 
-            if rq.fak:
-                self.remaining_qty[rq.id] = 0
+            self.remaining_qty = defaultdict(int)
+            for queued_order in orderbook:
+                self.remaining_qty[queued_order.id] = queued_order.qty
 
             result = self.translate_confirmation_msg(rq)
         else:
@@ -193,6 +191,7 @@ class Translator:
             else:
                 if rq[0] in {"NewOrderRq", "ReplaceOrderRq"}:
                     order_rq = OrderRq(*rq)
+                    
                     trades_count_msg = haskell_res[rs_idx]
                     rs_idx += 1
                     assert trades_count_msg[0] == "Trades", "line " + str(rs_idx+request_count+2) + " Trades count should be declared after OrderRq but " + trades_count_msg[0]
@@ -200,8 +199,32 @@ class Translator:
                     trades = haskell_res[rs_idx: rs_idx+trades_count]
                     trades = list(map(lambda trade: Trade(*trade[1:]), trades))
                     rs_idx += trades_count
+
+                    orderbook_count_msg = haskell_res[rs_idx]
+                    rs_idx += 1
+                    assert orderbook_count_msg[0] == "Orders", "line " + str(rs_idx+request_count+2) + " OrderBooks length should be declared after OrderRq but " + orderbook_count_msg[0]
+                    orderbook_count = orderbook_count_msg[1]
+                    orderbook = haskell_res[rs_idx: rs_idx+orderbook_count]
+                    orderbook = list(map(lambda order: OrderRq(None, None, *order[1:]), orderbook))
+                    rs_idx += orderbook_count
+
+                    credits_count_msg = haskell_res[rs_idx]
+                    rs_idx += 1
+                    assert credits_count_msg[0] == "Credits", "line " + str(rs_idx+request_count+2) + " Credits count should be declared after OrderRq but " + credits_count_msg[0]
+                    credits_count = credits_count_msg[1]
+                    rs_idx += credits_count
+
+                    ownerships_count_msg = haskell_res[rs_idx]
+                    rs_idx += 1
+                    assert ownerships_count_msg[0] == "Ownerships", "line " + str(rs_idx+request_count+2) + " Ownerships count should be declared after OrderRq but " + ownerships_count_msg[0]
+                    ownerships_count = ownerships_count_msg[1]
+                    rs_idx += ownerships_count
+
+                    reference_price_msg = haskell_res[rs_idx]
+                    assert reference_price_msg[0] == "ReferencePrice", "line " + str(rs_idx+request_count+2) + " ReferencePrice should be declared after OrderRq but " + reference_price_msg[0]
+                    rs_idx += 1
                     
-                    feed, results = self.translate_incoming_order_cmd(order_rq, rs, trades)
+                    feed, results = self.translate_incoming_order_cmd(order_rq, rs, trades, orderbook)
                     translated_feed.append(feed)
                     translated_result += results
                 elif rq[0] == "CancelOrderRq":
