@@ -130,15 +130,18 @@ class Translator:
         translated_trades = []
         if rs[1] in {"Accepted", "Eliminated"}:
             self.update_order_book_view_by_order(rq, rs[1] == "Eliminated")
+            
+            traded_qty_on_entry = 0
             assert not (rs[1] == "Eliminated" and len(trades) > 0), "Eliminated orders should not generate trades"
             for trade in trades:
+                traded_qty_on_entry += trade.qty
                 translated_trades += self.translate_trade(trade)
 
             self.remaining_qty = defaultdict(int)
             for queued_order in orderbook:
                 self.remaining_qty[queued_order.id] = queued_order.qty
 
-            result = self.translate_confirmation_msg(rq)
+            result = self.translate_confirmation_msg(rq, traded_qty_on_entry)
         else:
             result = self.translate_rejection_msg(rq)
             assert not trades, "trades on rejected order %s" % rq.id
@@ -327,7 +330,7 @@ class Translator:
             "".ljust(71),
         ])
 
-    def translate_confirmation_msg(self, rq: OrderRq) -> str:
+    def translate_confirmation_msg(self, rq: OrderRq, traded_qty_on_entry: int = 0) -> str:
         """translate SLE-0172"""
         if rq.order_request_type == "CancelOrderRq":
             order_status = "A"
@@ -352,7 +355,7 @@ class Translator:
             "%06d" % 0,
             self.time,
             {"Limit": "L", "Iceberg": "L"}.get(rq.order_type, " "),  # type
-            "%012d" % (rq.qty - self.remaining_qty[rq.id]),  # matched qty at entry
+            "%012d" % traded_qty_on_entry,  # matched qty at entry
             {
                 "NewOrderRq": "0001",
                 "ReplaceOrderRq": "0002",
