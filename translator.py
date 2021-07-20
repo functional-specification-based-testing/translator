@@ -45,6 +45,7 @@ class Translator:
     orders: Dict[str, object]
     remaining_qty: Dict[str, int]
     sequence_nums: Dict[str, int]
+    eliminated: Dict[str, bool]
 
     def __init__(
         self,
@@ -70,6 +71,7 @@ class Translator:
         self.orders = {}
         self.remaining_qty = {}
         self.sequence_nums = {}
+        self.eliminated = {}
 
     @staticmethod
     def translate_price_to_mmtp(price: float):
@@ -93,7 +95,7 @@ class Translator:
             self.translate_execution_notice(trade, self.orders[trade.sell_id]),
         ]
 
-    def update_order_book_view_by_order(self, rq: OrderRq) -> None:
+    def update_order_book_view_by_order(self, rq: OrderRq, eliminated: bool) -> None:
         assert rq.order_request_type in {"NewOrderRq", "ReplaceOrderRq"}, "Invalid order request type"
         if rq.order_request_type == "NewOrderRq":
             assert rq.id not in self.orders, "order %s already in order book view" % rq.id
@@ -103,7 +105,8 @@ class Translator:
         self.orders[rq.id] = rq
         self.order_cnt += 1
         self.sequence_nums[rq.id] = self.order_cnt
-        self.remaining_qty[rq.id] = rq.qty
+        self.remaining_qty[rq.id] = rq.qty if not eliminated else 0
+        self.eliminated[rq.id] = eliminated
 
     def update_order_book_view_by_cancel_order(self, rq: OrderRq) -> None:
         assert rq.order_request_type == "CancelOrderRq", "Invalid order request type"
@@ -128,10 +131,15 @@ class Translator:
         order = self.translate_order(rq)
         print(asdict(rq))
         translated_trades = []
-        if rs[1]:
-            self.update_order_book_view_by_order(rq)
+        if rs[1] in {"Accepted", "Eliminated"}:
+            self.update_order_book_view_by_order(rq, rs[1] == "Eliminated")
+            assert not (rs[1] == "Eliminated" and len(trades) > 0), "Eliminated orders should not generate trades"
             for trade in trades:
                 translated_trades += self.translate_trade(trade)
+
+            if rq.fak:
+                self.remaining_qty[rq.id] = 0
+
             result = self.translate_confirmation_msg(rq)
         else:
             result = self.translate_rejection_msg(rq)
@@ -149,7 +157,7 @@ class Translator:
 
         order = self.translate_cancel_order(rq)
         print(asdict(rq))
-        if rs[1]:
+        if rs[1] in {"Accepted", "Eliminated"}:
             self.update_order_book_view_by_cancel_order(rq)
             result = self.translate_confirmation_msg(rq)
         else:
@@ -176,7 +184,7 @@ class Translator:
             assert rq[0][0:-2] == rs[0][0:-2], "line " + str(rs_idx+request_count+2) + " response should match request: %s, %s" % (rq[0], rs[0])
             
             if rq[0].startswith("Set"):
-                assert rs[1], "unsuccessful admin command " + rq[0]
+                assert rs[1] == "Accepted", "unsuccessful admin command " + rq[0]
             
                 feed, result = self.translate_admin_cmd(rq)
                 translated_feed.append(feed)
@@ -299,6 +307,8 @@ class Translator:
         """translate SLE-0172"""
         if rq.order_request_type == "CancelOrderRq":
             order_status = "A"
+        elif self.eliminated[rq.id]:
+            order_status = "E"
         elif self.remaining_qty[rq.id] == 0:
             order_status = "X"
         else:

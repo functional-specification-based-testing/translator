@@ -16,9 +16,9 @@ def preprocess(lines: List[str]) -> List[List[object]]:
             pass
         if itm == "":
             return None
-        elif itm.lower() in {"true", "fak", "accepted"}:
+        elif itm.lower() in {"true", "fak"}:
             return True
-        elif itm.lower() in {"false", "---", "rejected"}:
+        elif itm.lower() in {"false", "---"}:
             return False
         else:
             return itm
