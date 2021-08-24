@@ -260,7 +260,7 @@ class Translator:
 
         supports at most one SetOwnershipRq for each shareholder
         """
-        return "POST PO shareholder=%s shares=%s" % tuple(rq[1:]), ""
+        return "SET PO shareholder=%s shares=%s" % tuple(rq[1:]), ""
         return json.dumps({
             "command": "Transfer Share",
             "transferCommand": {
@@ -274,7 +274,7 @@ class Translator:
 
     def translate_credit_cmd(self, rq: List[object]) -> Tuple[str, str]:
         """translate "Set Credit" Admin Command to set credit of brokers"""
-        return "POST CM broker=%s credit=%s" % tuple(rq[1:]), ""
+        return "SET CM broker=%s credit=%s" % tuple(rq[1:]), ""
 
     def translate_order(self, rq: OrderRq) -> str:
         """translate SLE-0001 & SLE-0002"""

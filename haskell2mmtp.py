@@ -48,7 +48,7 @@ def main():
     # print("\n".join(translated_feed))
     # print("\n".join(translated_result))
     with open("feed.mmtp", "w") as f:
-        print("\n".join(filter(lambda line: not line.startswith("POST"), translated_feed)), file=f)
+        print("\n".join(translated_feed), file=f)
     with open("oracle.mmtp", "w") as f:
         print("\n".join(translated_result), file=f)
 
