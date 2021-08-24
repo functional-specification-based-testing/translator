@@ -316,19 +316,19 @@ class Translator:
 
     def translate_tick_size_cmd(self, rq: List[object]) -> Tuple[str, str]:
         """translate "Set Tick" Admin Command to set security price tick size"""
-        return "SET TICK tick=%s" % tuple(rq[1:]), ""
+        return "SET SECURITY tick=%s" % tuple(rq[1:]), ""
 
     def translate_lot_size_cmd(self, rq: List[object]) -> Tuple[str, str]:
         """translate "Set Lot" Admin Command to set security quantity lot size"""
-        return "SET LOT lot=%s" % tuple(rq[1:]), ""
+        return "SET SECURITY lot=%s" % tuple(rq[1:]), ""
 
     def translate_ownership_upper_limit_cmd(self, rq: List[object]) -> Tuple[str, str]:
-        """translate "Set OwnershipUpperrLimit" Admin Command to set security max allowed percentage of ownership"""
-        return "SET OWNERSHIP_UPPERR_LIMIT ownershipUpperrLimit=%s" % tuple(rq[1:]), ""
+        """translate "Set OwnershipUpperLimit" Admin Command to set security max allowed percentage of ownership"""
+        return "SET SECURITY ownershipUpperLimit=%s" % tuple(rq[1:]), ""
 
     def translate_total_shares_cmd(self, rq: List[object]) -> Tuple[str, str]:
         """translate "Set TotalShares" Admin Command to set security total number of shares"""
-        return "SET TOTAL_SHARES totalShares=%s" % tuple(rq[1:]), ""
+        return "SET SECURITY totalShares=%s" % tuple(rq[1:]), ""
 
     def translate_order(self, rq: OrderRq) -> str:
         """translate SLE-0001 & SLE-0002"""
