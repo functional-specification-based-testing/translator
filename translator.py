@@ -38,6 +38,7 @@ class Translator:
     group: str
     date: str
     time: str
+    reference_price: float
     lower_bound_percentage: float
     upper_bound_percentage: float
     src_shareholder_id: str
@@ -55,6 +56,7 @@ class Translator:
         group: str = "N1",
         date: str = "20191028",
         time: str = "083000",
+        reference_price: float = 10.0,
         lower_bound_percentage: float = 0.4,
         upper_bound_percentage: float = 0.4,
         src_shareholder_id: str = "1000",
@@ -64,6 +66,7 @@ class Translator:
         self.group = group
         self.date = date
         self.time = time
+        self.reference_price = reference_price
         self.lower_bound_percentage = lower_bound_percentage
         self.upper_bound_percentage = upper_bound_percentage
         self.src_shareholder_id = src_shareholder_id
@@ -75,17 +78,29 @@ class Translator:
         self.eliminated = {}
 
     @staticmethod
-    def translate_price_to_mmtp(price: float):
+    def translate_price_to_mmtp(price: float) -> str:
         """translate price to IFt-QMt9 MMTP format"""
         return "2" + "%07d" % int(price) + "00"  # FIXME
 
     def translate_admin_cmd(self, rq: List[object]) -> Tuple[str, str]:
         if rq[0] == "SetReferencePriceRq":
             return self.translate_reference_price_cmd(rq)
+        elif rq[0] == "SetStaticPriceBandUpperLimitRq":
+            return self.translate_upper_price_band_cmd(rq)
+        elif rq[0] == "SetStaticPriceBandLowerLimitRq":
+            return self.translate_lower_price_band_cmd(rq)
         elif rq[0] == "SetOwnershipRq":
             return self.translate_ownership_cmd(rq)
         elif rq[0] == "SetCreditRq":
             return self.translate_credit_cmd(rq)
+        elif rq[0] == "SetTickSizeRq":
+            return self.translate_tick_size_cmd(rq)
+        elif rq[0] == "SetLotSizeRq":
+            return self.translate_lot_size_cmd(rq)
+        elif rq[0] == "SetOwnershipUpperLimitRq":
+            return self.translate_ownership_upper_limit_cmd(rq)
+        elif rq[0] == "SetTotalSharesRq":
+            return self.translate_total_shares_cmd(rq)
         else:
             raise ValueError(rq[0])
 
@@ -176,8 +191,8 @@ class Translator:
             rq = haskell_req[i]
             rs = haskell_res[rs_idx]
             rs_idx += 1
-            print(rq)
-            print(rs)
+            # print(rq)
+            # print(rs)
             assert rq[0].endswith("Rq"), "line " + str(i+2) + " request should be ended with 'Rq' " + rq[0]
             assert rs[0].endswith("Rs"), "line " + str(rs_idx+request_count+2) + " response should be ended with 'Rs' " + rq[0]
             assert rq[0][0:-2] == rs[0][0:-2], "line " + str(rs_idx+request_count+2) + " response should match request: %s, %s" % (rq[0], rs[0])
@@ -224,6 +239,30 @@ class Translator:
                     reference_price_msg = haskell_res[rs_idx]
                     assert reference_price_msg[0] == "ReferencePrice", "line " + str(rs_idx+request_count+2) + " ReferencePrice should be declared after OrderRq but " + reference_price_msg[0]
                     rs_idx += 1
+
+                    static_price_band_lower_limit_msg = haskell_res[rs_idx]
+                    assert static_price_band_lower_limit_msg[0] == "StaticPriceBandLowerLimit", "line " + str(rs_idx+request_count+2) + " StaticPriceBandLowerLimit should be declared after OrderRq but " + reference_price_msg[0]
+                    rs_idx += 1
+
+                    static_price_band_upper_limit_msg = haskell_res[rs_idx]
+                    assert static_price_band_upper_limit_msg[0] == "StaticPriceBandUpperLimit", "line " + str(rs_idx+request_count+2) + " StaticPriceBandUpperLimit should be declared after OrderRq but " + reference_price_msg[0]
+                    rs_idx += 1
+
+                    total_shares_msg = haskell_res[rs_idx]
+                    assert total_shares_msg[0] == "TotalShares", "line " + str(rs_idx+request_count+2) + " TotalShares should be declared after OrderRq but " + reference_price_msg[0]
+                    rs_idx += 1
+
+                    ownership_upper_limit_msg = haskell_res[rs_idx]
+                    assert ownership_upper_limit_msg[0] == "OwnershipUpperLimit", "line " + str(rs_idx+request_count+2) + " OwnershipUpperLimit should be declared after OrderRq but " + reference_price_msg[0]
+                    rs_idx += 1
+
+                    tick_size_msg = haskell_res[rs_idx]
+                    assert tick_size_msg[0] == "TickSize", "line " + str(rs_idx+request_count+2) + " TickSize should be declared after OrderRq but " + reference_price_msg[0]
+                    rs_idx += 1
+
+                    lot_size_msg = haskell_res[rs_idx]
+                    assert lot_size_msg[0] == "LotSize", "line " + str(rs_idx+request_count+2) + " LotSize should be declared after OrderRq but " + reference_price_msg[0]
+                    rs_idx += 1
                     
                     feed, results = self.translate_incoming_order_cmd(order_rq, rs, trades, orderbook)
                     translated_feed.append(feed)
@@ -242,37 +281,54 @@ class Translator:
         return translated_feed, translated_result
 
     def translate_reference_price_cmd(self, rq: List[object]) -> Tuple[str, str]:
-        """translate "Change Static Price Band" Admin Command to set reference price & price bands"""
+        """translate "Change Static Price Band" Admin Command to set reference price"""
+        self.reference_price = float(rq[1])
+        return self.get_price_band_cmd(), ""
+
+    def translate_lower_price_band_cmd(self, rq: List[object]) -> Tuple[str, str]:
+        """translate "Change Static Price Band" Admin Command to set lower price band"""
+        self.lower_bound_percentage = float(rq[1])
+        return self.get_price_band_cmd(), ""
+
+    def translate_upper_price_band_cmd(self, rq: List[object]) -> Tuple[str, str]:
+        """translate "Change Static Price Band" Admin Command to set upper price band"""
+        self.upper_bound_percentage = float(rq[1])
+        return self.get_price_band_cmd(), ""
+
+    def get_price_band_cmd(self):
         return json.dumps({
             "command": "Change Static Price Band",
             "staticPriceBandData": {
                 "lowerBoundPercentage": self.lower_bound_percentage,
                 "upperBoundPercentage": self.upper_bound_percentage,
-                "referencePrice": float(rq[1]),
+                "referencePrice": self.reference_price,
                 "securityId": self.security_id,
             },
-        }), ""
+        })
 
     def translate_ownership_cmd(self, rq: List[object]) -> Tuple[str, str]:
-        """translate "Transfer Share" Admin Command to set ownership of shareholders
-
-        supports at most one SetOwnershipRq for each shareholder
-        """
+        """translate "Set Ownership" Admin Command to set ownership of shareholders"""
         return "SET PO shareholder=%s shares=%s" % tuple(rq[1:]), ""
-        return json.dumps({
-            "command": "Transfer Share",
-            "transferCommand": {
-                "sourceId": self.src_shareholder_id,
-                "destinationId": str(rq[1]),
-                "cisin": self.cisin,
-                "quantity": rq[2],
-                # "isBlockedStatusIgnored": False,
-            },
-        }), ""
 
     def translate_credit_cmd(self, rq: List[object]) -> Tuple[str, str]:
         """translate "Set Credit" Admin Command to set credit of brokers"""
         return "SET CM broker=%s credit=%s" % tuple(rq[1:]), ""
+
+    def translate_tick_size_cmd(self, rq: List[object]) -> Tuple[str, str]:
+        """translate "Set Tick" Admin Command to set security price tick size"""
+        return "SET TICK tick=%s" % tuple(rq[1:]), ""
+
+    def translate_lot_size_cmd(self, rq: List[object]) -> Tuple[str, str]:
+        """translate "Set Lot" Admin Command to set security quantity lot size"""
+        return "SET LOT lot=%s" % tuple(rq[1:]), ""
+
+    def translate_ownership_upper_limit_cmd(self, rq: List[object]) -> Tuple[str, str]:
+        """translate "Set OwnershipUpperrLimit" Admin Command to set security max allowed percentage of ownership"""
+        return "SET OWNERSHIP_UPPERR_LIMIT ownershipUpperrLimit=%s" % tuple(rq[1:]), ""
+
+    def translate_total_shares_cmd(self, rq: List[object]) -> Tuple[str, str]:
+        """translate "Set TotalShares" Admin Command to set security total number of shares"""
+        return "SET TOTAL_SHARES totalShares=%s" % tuple(rq[1:]), ""
 
     def translate_order(self, rq: OrderRq) -> str:
         """translate SLE-0001 & SLE-0002"""
