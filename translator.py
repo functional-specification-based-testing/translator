@@ -172,8 +172,6 @@ class Translator:
         translated_result = []
         rs_idx = 0
 
-        translated_feed.append(json.dumps({"command": "Start Session"}))
-
         for i in range(request_count):
             rq = haskell_req[i]
             rs = haskell_res[rs_idx]
