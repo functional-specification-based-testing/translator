@@ -2,7 +2,9 @@
 
 
 from operator import methodcaller
-from typing import List, Tuple
+from typing import List
+from sys import stderr, argv
+
 
 from translator import Translator
 
@@ -33,9 +35,13 @@ def preprocess(lines: List[str]) -> List[List[object]]:
 
 
 def main():
-    with open("../ga.one.txt") as f:
+    if len(argv) != 5:
+        print("usage:\t%s <haskell_input> <haskell_output> <feed.mmtp> <oracle.mmtp>" % argv[0], file=stderr)
+        exit(2)
+
+    with open(argv[1]) as f:
         haskell_feed = list(map(str.strip, f))[2:]
-    with open("../ga.one.results.txt") as f:
+    with open(argv[2]) as f:
         haskell_res = list(map(str.strip, f))
     request_count = int(haskell_res[0])
     haskell_res = haskell_res[1:]
@@ -47,9 +53,9 @@ def main():
     translated_result = list(filter(None, translated_result))
     # print("\n".join(translated_feed))
     # print("\n".join(translated_result))
-    with open("feed.mmtp", "w") as f:
+    with open(argv[3], "w") as f:
         print("\n".join(translated_feed), file=f)
-    with open("oracle.mmtp", "w") as f:
+    with open(argv[4], "w") as f:
         print("\n".join(translated_result), file=f)
 
 
