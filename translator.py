@@ -180,6 +180,68 @@ class Translator:
             result = self.translate_rejection_msg(rq)
         return order, result
 
+    def _read_state(self, haskell_res: List[List[object]], rs_idx: int, request_count: int):
+        orderbook_count_msg = haskell_res[rs_idx]
+        rs_idx += 1
+        assert orderbook_count_msg[0] == "Orders", "line " + str(rs_idx+request_count+2) + " OrderBooks length should be declared after OrderRq but " + orderbook_count_msg[0]
+        orderbook_count = orderbook_count_msg[1]
+        orderbook = haskell_res[rs_idx: rs_idx+orderbook_count]
+        orderbook = list(map(lambda order: OrderRq(None, None, *order[1:]), orderbook))
+        rs_idx += orderbook_count
+
+        credits_count_msg = haskell_res[rs_idx]
+        rs_idx += 1
+        assert credits_count_msg[0] == "Credits", "line " + str(rs_idx+request_count+2) + " Credits count should be declared after OrderRq but " + credits_count_msg[0]
+        credits_count = credits_count_msg[1]
+        rs_idx += credits_count
+
+        ownerships_count_msg = haskell_res[rs_idx]
+        rs_idx += 1
+        assert ownerships_count_msg[0] == "Ownerships", "line " + str(rs_idx+request_count+2) + " Ownerships count should be declared after OrderRq but " + ownerships_count_msg[0]
+        ownerships_count = ownerships_count_msg[1]
+        rs_idx += ownerships_count
+
+        reference_price_msg = haskell_res[rs_idx]
+        assert reference_price_msg[0] == "ReferencePrice", "line " + str(rs_idx+request_count+2) + " ReferencePrice should be declared after OrderRq but " + reference_price_msg[0]
+        rs_idx += 1
+
+        static_price_band_lower_limit_msg = haskell_res[rs_idx]
+        assert static_price_band_lower_limit_msg[0] == "StaticPriceBandLowerLimit", "line " + str(rs_idx+request_count+2) + " StaticPriceBandLowerLimit should be declared after OrderRq but " + reference_price_msg[0]
+        rs_idx += 1
+
+        static_price_band_upper_limit_msg = haskell_res[rs_idx]
+        assert static_price_band_upper_limit_msg[0] == "StaticPriceBandUpperLimit", "line " + str(rs_idx+request_count+2) + " StaticPriceBandUpperLimit should be declared after OrderRq but " + reference_price_msg[0]
+        rs_idx += 1
+
+        total_shares_msg = haskell_res[rs_idx]
+        assert total_shares_msg[0] == "TotalShares", "line " + str(rs_idx+request_count+2) + " TotalShares should be declared after OrderRq but " + reference_price_msg[0]
+        rs_idx += 1
+
+        ownership_upper_limit_msg = haskell_res[rs_idx]
+        assert ownership_upper_limit_msg[0] == "OwnershipUpperLimit", "line " + str(rs_idx+request_count+2) + " OwnershipUpperLimit should be declared after OrderRq but " + reference_price_msg[0]
+        rs_idx += 1
+
+        tick_size_msg = haskell_res[rs_idx]
+        assert tick_size_msg[0] == "TickSize", "line " + str(rs_idx+request_count+2) + " TickSize should be declared after OrderRq but " + reference_price_msg[0]
+        rs_idx += 1
+
+        lot_size_msg = haskell_res[rs_idx]
+        assert lot_size_msg[0] == "LotSize", "line " + str(rs_idx+request_count+2) + " LotSize should be declared after OrderRq but " + reference_price_msg[0]
+        rs_idx += 1
+
+        return rs_idx, orderbook
+
+    def _read_trades(self, haskell_res: List[List[object]], rs_idx: int, request_count: int):
+        trades_count_msg = haskell_res[rs_idx]
+        rs_idx += 1
+        assert trades_count_msg[0] == "Trades", "line " + str(rs_idx+request_count+2) + " Trades count should be declared after OrderRq but " + trades_count_msg[0]
+        trades_count = trades_count_msg[1]
+        trades = haskell_res[rs_idx: rs_idx+trades_count]
+        trades = list(map(lambda trade: Trade(*trade[1:]), trades))
+        rs_idx += trades_count
+
+        return rs_idx, trades
+
     def translate(self, request_count: int, haskell: List[List[object]]) -> Tuple[List[str], List[str]]:
         haskell_req = haskell[:request_count]
         haskell_res = haskell[request_count:]
@@ -207,68 +269,14 @@ class Translator:
             else:
                 if rq[0] in {"NewOrderRq", "ReplaceOrderRq"}:
                     order_rq = OrderRq(*rq)
-                    
-                    trades_count_msg = haskell_res[rs_idx]
-                    rs_idx += 1
-                    assert trades_count_msg[0] == "Trades", "line " + str(rs_idx+request_count+2) + " Trades count should be declared after OrderRq but " + trades_count_msg[0]
-                    trades_count = trades_count_msg[1]
-                    trades = haskell_res[rs_idx: rs_idx+trades_count]
-                    trades = list(map(lambda trade: Trade(*trade[1:]), trades))
-                    rs_idx += trades_count
-
-                    orderbook_count_msg = haskell_res[rs_idx]
-                    rs_idx += 1
-                    assert orderbook_count_msg[0] == "Orders", "line " + str(rs_idx+request_count+2) + " OrderBooks length should be declared after OrderRq but " + orderbook_count_msg[0]
-                    orderbook_count = orderbook_count_msg[1]
-                    orderbook = haskell_res[rs_idx: rs_idx+orderbook_count]
-                    orderbook = list(map(lambda order: OrderRq(None, None, *order[1:]), orderbook))
-                    rs_idx += orderbook_count
-
-                    credits_count_msg = haskell_res[rs_idx]
-                    rs_idx += 1
-                    assert credits_count_msg[0] == "Credits", "line " + str(rs_idx+request_count+2) + " Credits count should be declared after OrderRq but " + credits_count_msg[0]
-                    credits_count = credits_count_msg[1]
-                    rs_idx += credits_count
-
-                    ownerships_count_msg = haskell_res[rs_idx]
-                    rs_idx += 1
-                    assert ownerships_count_msg[0] == "Ownerships", "line " + str(rs_idx+request_count+2) + " Ownerships count should be declared after OrderRq but " + ownerships_count_msg[0]
-                    ownerships_count = ownerships_count_msg[1]
-                    rs_idx += ownerships_count
-
-                    reference_price_msg = haskell_res[rs_idx]
-                    assert reference_price_msg[0] == "ReferencePrice", "line " + str(rs_idx+request_count+2) + " ReferencePrice should be declared after OrderRq but " + reference_price_msg[0]
-                    rs_idx += 1
-
-                    static_price_band_lower_limit_msg = haskell_res[rs_idx]
-                    assert static_price_band_lower_limit_msg[0] == "StaticPriceBandLowerLimit", "line " + str(rs_idx+request_count+2) + " StaticPriceBandLowerLimit should be declared after OrderRq but " + reference_price_msg[0]
-                    rs_idx += 1
-
-                    static_price_band_upper_limit_msg = haskell_res[rs_idx]
-                    assert static_price_band_upper_limit_msg[0] == "StaticPriceBandUpperLimit", "line " + str(rs_idx+request_count+2) + " StaticPriceBandUpperLimit should be declared after OrderRq but " + reference_price_msg[0]
-                    rs_idx += 1
-
-                    total_shares_msg = haskell_res[rs_idx]
-                    assert total_shares_msg[0] == "TotalShares", "line " + str(rs_idx+request_count+2) + " TotalShares should be declared after OrderRq but " + reference_price_msg[0]
-                    rs_idx += 1
-
-                    ownership_upper_limit_msg = haskell_res[rs_idx]
-                    assert ownership_upper_limit_msg[0] == "OwnershipUpperLimit", "line " + str(rs_idx+request_count+2) + " OwnershipUpperLimit should be declared after OrderRq but " + reference_price_msg[0]
-                    rs_idx += 1
-
-                    tick_size_msg = haskell_res[rs_idx]
-                    assert tick_size_msg[0] == "TickSize", "line " + str(rs_idx+request_count+2) + " TickSize should be declared after OrderRq but " + reference_price_msg[0]
-                    rs_idx += 1
-
-                    lot_size_msg = haskell_res[rs_idx]
-                    assert lot_size_msg[0] == "LotSize", "line " + str(rs_idx+request_count+2) + " LotSize should be declared after OrderRq but " + reference_price_msg[0]
-                    rs_idx += 1
-                    
+                    rs_idx, trades = self._read_trades(haskell_res, rs_idx, request_count)
+                    rs_idx, orderbook = self._read_state(haskell_res, rs_idx, request_count)
                     feed, results = self.translate_incoming_order_cmd(order_rq, rs, trades, orderbook)
                     translated_feed.append(feed)
                     translated_result += results
                 elif rq[0] == "CancelOrderRq":
                     order_rq = OrderRq(*rq, None, None, None)
+                    rs_idx, _ = self._read_state(haskell_res, rs_idx, request_count)
                     feed, result = self.translate_cancel_order_cmd(order_rq, rs)
                     translated_feed.append(feed)
                     translated_result.append(result)
