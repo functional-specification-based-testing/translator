@@ -57,8 +57,8 @@ class Translator:
         date: str = "20191028",
         time: str = "083000",
         reference_price: float = 10.0,
-        lower_bound_percentage: float = 0.4,
-        upper_bound_percentage: float = 0.4,
+        lower_bound_percentage: float = 0.9,
+        upper_bound_percentage: float = 0.9,
         src_shareholder_id: str = "1000",
     ):
         self.security_id = security_id
