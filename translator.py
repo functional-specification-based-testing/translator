@@ -82,7 +82,7 @@ class Translator:
         """translate price to IFt-QMt9 MMTP format"""
         return "2" + "%07d" % int(price) + "00"  # FIXME
 
-    def translate_admin_cmd(self, rq: List[object]) -> Tuple[str, str]:
+    def translate_admin_cmd(self, rq: List[object]) -> Tuple[List[str], List[str]]:
         if rq[0] == "SetReferencePriceRq":
             return self.translate_reference_price_cmd(rq)
         elif rq[0] == "SetStaticPriceBandUpperLimitRq":
@@ -263,8 +263,8 @@ class Translator:
                 assert rs[1] == "Accepted", "unsuccessful admin command " + rq[0]
             
                 feed, result = self.translate_admin_cmd(rq)
-                translated_feed.append(feed)
-                translated_result.append(result)
+                translated_feed += feed
+                translated_result += result
             
             else:
                 if rq[0] in {"NewOrderRq", "ReplaceOrderRq"}:
@@ -288,55 +288,69 @@ class Translator:
 
         return translated_feed, translated_result
 
-    def translate_reference_price_cmd(self, rq: List[object]) -> Tuple[str, str]:
+    def translate_reference_price_cmd(self, rq: List[object]) -> Tuple[List[str], List[str]]:
         """translate "Change Static Price Band" Admin Command to set reference price"""
         self.reference_price = float(rq[1])
-        return self.get_price_band_cmd(), ""
+        return self.get_price_band_cmds(), [""]
 
-    def translate_lower_price_band_cmd(self, rq: List[object]) -> Tuple[str, str]:
+    def translate_lower_price_band_cmd(self, rq: List[object]) -> Tuple[List[str], List[str]]:
         """translate "Change Static Price Band" Admin Command to set lower price band"""
         self.lower_bound_percentage = float(rq[1])
-        return self.get_price_band_cmd(), ""
+        return self.get_price_band_cmds(), [""]
 
-    def translate_upper_price_band_cmd(self, rq: List[object]) -> Tuple[str, str]:
+    def translate_upper_price_band_cmd(self, rq: List[object]) -> Tuple[List[str], List[str]]:
         """translate "Change Static Price Band" Admin Command to set upper price band"""
         self.upper_bound_percentage = float(rq[1])
-        return self.get_price_band_cmd(), ""
+        return self.get_price_band_cmds(), [""]
 
-    def get_price_band_cmd(self):
-        return json.dumps({
-            "command": "Change Static Price Band",
-            "staticPriceBandData": {
-                "lowerBoundPercentage": self.lower_bound_percentage,
-                "upperBoundPercentage": self.upper_bound_percentage,
-                "referencePrice": self.reference_price,
-                "securityId": self.security_id,
-            },
-        })
+    def get_price_band_cmds(self) -> [str]:
+        return [
+            json.dumps({
+                "command": "Suspend Instrument",
+                "securities": [self.security_id],
+            }),
+            json.dumps({
+                "command": "Change Static Price Band",
+                "staticPriceBandData": {
+                    "lowerBoundPercentage": self.lower_bound_percentage,
+                    "upperBoundPercentage": self.upper_bound_percentage,
+                    "referencePrice": self.reference_price,
+                    "securityId": self.security_id,
+                },
+            }),
+            json.dumps({
+                "command": "Reserve Instrument",
+                "securities": [self.security_id],
+            }),
+            json.dumps({
+                "command": "Open Instrument",
+                "securities": [self.security_id],
+            }),
+        ]
 
-    def translate_ownership_cmd(self, rq: List[object]) -> Tuple[str, str]:
+    def translate_ownership_cmd(self, rq: List[object]) -> Tuple[List[str], List[str]]:
         """translate "Set Ownership" Admin Command to set ownership of shareholders"""
-        return "SET PO shareholder=%s shares=%s" % tuple(rq[1:]), ""
+        return ["SET PO shareholder=%s shares=%s" % tuple(rq[1:])], [""]
 
-    def translate_credit_cmd(self, rq: List[object]) -> Tuple[str, str]:
+    def translate_credit_cmd(self, rq: List[object]) -> Tuple[List[str], List[str]]:
         """translate "Set Credit" Admin Command to set credit of brokers"""
-        return "SET CM broker=%s credit=%s" % tuple(rq[1:]), ""
+        return ["SET CM broker=%s credit=%s" % tuple(rq[1:])], [""]
 
-    def translate_tick_size_cmd(self, rq: List[object]) -> Tuple[str, str]:
+    def translate_tick_size_cmd(self, rq: List[object]) -> Tuple[List[str], List[str]]:
         """translate "Set Tick" Admin Command to set security price tick size"""
-        return "SET SECURITY tick=%s" % tuple(rq[1:]), ""
+        return ["SET SECURITY tick=%s" % tuple(rq[1:])], [""]
 
-    def translate_lot_size_cmd(self, rq: List[object]) -> Tuple[str, str]:
+    def translate_lot_size_cmd(self, rq: List[object]) -> Tuple[List[str], List[str]]:
         """translate "Set Lot" Admin Command to set security quantity lot size"""
-        return "SET SECURITY lot=%s" % tuple(rq[1:]), ""
+        return ["SET SECURITY lot=%s" % tuple(rq[1:])], [""]
 
-    def translate_ownership_upper_limit_cmd(self, rq: List[object]) -> Tuple[str, str]:
+    def translate_ownership_upper_limit_cmd(self, rq: List[object]) -> Tuple[List[str], List[str]]:
         """translate "Set OwnershipUpperLimit" Admin Command to set security max allowed percentage of ownership"""
-        return "SET SECURITY ownershipUpperLimit=%s" % tuple(rq[1:]), ""
+        return ["SET SECURITY ownershipUpperLimit=%s" % tuple(rq[1:])], [""]
 
-    def translate_total_shares_cmd(self, rq: List[object]) -> Tuple[str, str]:
+    def translate_total_shares_cmd(self, rq: List[object]) -> Tuple[List[str], List[str]]:
         """translate "Set TotalShares" Admin Command to set security total number of shares"""
-        return "SET SECURITY totalShares=%s" % tuple(rq[1:]), ""
+        return ["SET SECURITY totalShares=%s" % tuple(rq[1:])], [""]
 
     def translate_order(self, rq: OrderRq) -> str:
         """translate SLE-0001 & SLE-0002"""
