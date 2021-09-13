@@ -438,10 +438,10 @@ class Translator:
                 "CancelOrderRq": "0003",
             }.get(rq.order_request_type, "0000"),  # original function code
             {
-                "NewOrderRq": "%8s" % "",  # "%08d" % 0,
+                "NewOrderRq": "%08d" % 0,
                 "ReplaceOrderRq": self.date,
                 "CancelOrderRq": self.date,
-            }.get(rq.order_request_type, "%8s" % ""),  # original order date
+            }.get(rq.order_request_type, "%08d" % 0),  # original order date
             "%06d" % self.sequence_nums.get(rq.old_id, 0),  # original HON
             {True: "E", False: "J"}.get(rq.fak, " "),  # validity type
             "%08d" % 0,  # validity date
