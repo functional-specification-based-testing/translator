@@ -19,7 +19,9 @@ def main():
         test_cases = map("\n".join, test_cases)
 
         for idx, test_caes in enumerate(test_cases):
-            with open(path.join(argv[2], "testcase%03d" % (idx+1)), "w") as dst:
+            name = "testcase%03d" % (idx+1)
+            print(name)
+            with open(path.join(argv[2], name), "w") as dst:
                 print(test_caes, file=dst)
     
     assert idx+1 == test_suite_size, "incomplete source file"
