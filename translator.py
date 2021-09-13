@@ -141,7 +141,7 @@ class Translator:
 
     def translate_incoming_order_cmd(self, rq: OrderRq, rs: List[object], trades: List[Trade], orderbook: [OrderRq]) -> Tuple[str, List[str]]:
         order = self.translate_order(rq)
-        print(asdict(rq))
+        # print(asdict(rq))
         translated_trades = []
         if rs[1] in {"Accepted", "Eliminated"}:
             self.update_order_book_view_by_order(rq, rs[1] == "Eliminated")
@@ -172,7 +172,7 @@ class Translator:
             rq = new_rq
 
         order = self.translate_cancel_order(rq)
-        print(asdict(rq))
+        # print(asdict(rq))
         if rs[1] in {"Accepted", "Eliminated"}:
             self.update_order_book_view_by_cancel_order(rq)
             result = self.translate_confirmation_msg(rq)
