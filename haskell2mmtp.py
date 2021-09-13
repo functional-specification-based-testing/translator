@@ -35,27 +35,43 @@ def preprocess(lines: List[str]) -> List[List[object]]:
 
 
 def main():
-    if len(argv) != 5:
-        print("usage:\t%s <haskell_input> <haskell_output> <feed.mmtp> <oracle.mmtp>" % argv[0], file=stderr)
+    if len(argv) not in {4, 5}:
+        print("usage:\t%s [<haskell_input>] <haskell_output> <feed.mmtp> <oracle.mmtp>" % argv[0], file=stderr)
         exit(2)
 
-    with open(argv[1]) as f:
-        haskell_feed = list(map(str.strip, f))[2:]
-    with open(argv[2]) as f:
+    if len(argv) == 5:
+        haskell_input_path = argv[1]
+        haskell_output_path = argv[2]
+        feed_path = argv[3]
+        oracle_path = argv[4]
+    else:
+        haskell_input_path = None
+        haskell_output_path = argv[1]
+        feed_path = argv[2]
+        oracle_path = argv[3]
+
+    if haskell_input_path:
+        with open(haskell_input_path) as f:
+            haskell_feed = list(map(str.strip, f))[2:]
+        haskell_feed = preprocess(haskell_feed)
+
+    with open(haskell_output_path) as f:
         haskell_res = list(map(str.strip, f))
     request_count = int(haskell_res[0])
     haskell_res = haskell_res[1:]
-    haskell_feed = preprocess(haskell_feed)
     haskell_res = preprocess(haskell_res)
+
     translator = Translator()
     translated_feed, translated_result = translator.translate(request_count, haskell_res)
     translated_feed = list(filter(None, translated_feed))
     translated_result = list(filter(None, translated_result))
+
     # print("\n".join(translated_feed))
     # print("\n".join(translated_result))
-    with open(argv[3], "w") as f:
+
+    with open(feed_path, "w") as f:
         print("\n".join(translated_feed), file=f)
-    with open(argv[4], "w") as f:
+    with open(oracle_path, "w") as f:
         print("\n".join(translated_result), file=f)
 
 
