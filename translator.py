@@ -451,8 +451,8 @@ class Translator:
             "0",  # confirmation flag
             "%012d" % {
                 "NewOrderRq": 0,
-                "ReplaceOrderRq": self.remaining_qty.get(rq.old_id, None),
-                "CancelOrderRq": self.remaining_qty.get(rq.old_id, None),
+                "ReplaceOrderRq": self.remaining_qty.get(rq.old_id, 0),
+                "CancelOrderRq": self.remaining_qty.get(rq.old_id, 0),
             }.get(rq.order_request_type, 0),  # original remaining qty
             " %09d" % 0,  # trigger price
             "%06d" % 0,
