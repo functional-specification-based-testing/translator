@@ -46,6 +46,7 @@ class Translator:
     order_cnt: int
     orders: Dict[str, object]
     remaining_qty: DefaultDict[str, int]
+    previous_remaining_qty: DefaultDict[str, int]
     sequence_nums: Dict[str, int]
     eliminated: Dict[str, bool]
 
@@ -74,6 +75,7 @@ class Translator:
         self.order_cnt = 0
         self.orders = {}
         self.remaining_qty = defaultdict(int)
+        self.previous_remaining_qty = defaultdict(int)
         self.sequence_nums = {}
         self.eliminated = {}
 
@@ -139,6 +141,12 @@ class Translator:
         self.remaining_qty[trade.buy_id] -= trade.qty
         self.remaining_qty[trade.sell_id] -= trade.qty
 
+    def regenerate_order_book(self, orderbook: [OrderRq]):
+        self.previous_remaining_qty = self.remaining_qty
+        self.remaining_qty = defaultdict(int)
+        for queued_order in orderbook:
+            self.remaining_qty[queued_order.id] = queued_order.qty
+
     def translate_incoming_order_cmd(self, rq: OrderRq, rs: List[object], trades: List[Trade], orderbook: [OrderRq]) -> Tuple[str, List[str]]:
         order = self.translate_order(rq)
         # print(asdict(rq))
@@ -152,9 +160,7 @@ class Translator:
                 traded_qty_on_entry += trade.qty
                 translated_trades += self.translate_trade(trade)
 
-            self.remaining_qty = defaultdict(int)
-            for queued_order in orderbook:
-                self.remaining_qty[queued_order.id] = queued_order.qty
+            self.regenerate_order_book(orderbook)
 
             result = self.translate_confirmation_msg(rq, traded_qty_on_entry)
         else:
@@ -162,7 +168,7 @@ class Translator:
             assert not trades, "trades on rejected order %s" % rq.id
         return order, [result] + translated_trades
 
-    def translate_cancel_order_cmd(self, rq: OrderRq, rs: List[object]) -> Tuple[str, str]:
+    def translate_cancel_order_cmd(self, rq: OrderRq, rs: List[object], orderbook: [OrderRq]) -> Tuple[str, str]:
         if rq.old_id in self.orders:
             new_rq = deepcopy(self.orders[rq.old_id])
             new_rq.order_request_type = rq.order_request_type
@@ -175,6 +181,9 @@ class Translator:
         # print(asdict(rq))
         if rs[1] in {"Accepted", "Eliminated"}:
             self.update_order_book_view_by_cancel_order(rq)
+
+            self.regenerate_order_book(orderbook)
+
             result = self.translate_confirmation_msg(rq)
         else:
             result = self.translate_rejection_msg(rq)
@@ -276,8 +285,8 @@ class Translator:
                     translated_result += results
                 elif rq[0] == "CancelOrderRq":
                     order_rq = OrderRq(*rq, None, None, None)
-                    rs_idx, _ = self._read_state(haskell_res, rs_idx, request_count)
-                    feed, result = self.translate_cancel_order_cmd(order_rq, rs)
+                    rs_idx, orderbook = self._read_state(haskell_res, rs_idx, request_count)
+                    feed, result = self.translate_cancel_order_cmd(order_rq, rs, orderbook)
                     translated_feed.append(feed)
                     translated_result.append(result)
                 else:
@@ -451,8 +460,8 @@ class Translator:
             "0",  # confirmation flag
             "%012d" % {
                 "NewOrderRq": 0,
-                "ReplaceOrderRq": self.remaining_qty.get(rq.old_id, 0),
-                "CancelOrderRq": self.remaining_qty.get(rq.old_id, 0),
+                "ReplaceOrderRq": self.previous_remaining_qty.get(rq.old_id, 0),
+                "CancelOrderRq": self.previous_remaining_qty.get(rq.old_id, 0),
             }.get(rq.order_request_type, 0),  # original remaining qty
             " %09d" % 0,  # trigger price
             "%06d" % 0,
