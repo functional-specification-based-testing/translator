@@ -1,8 +1,8 @@
 import json
-from typing import List, Tuple, Dict, DefaultDict
 from collections import defaultdict
-from dataclasses import dataclass, asdict
 from copy import deepcopy
+from dataclasses import dataclass
+from typing import List, Tuple, Dict, DefaultDict
 
 
 @dataclass
@@ -51,16 +51,16 @@ class Translator:
     eliminated: Dict[str, bool]
 
     def __init__(
-        self,
-        security_id: str = "SPY",
-        cisin: str = "US78462F1030",
-        group: str = "N1",
-        date: str = "20191028",
-        time: str = "083000",
-        reference_price: float = 10.0,
-        lower_bound_percentage: float = 0.9,
-        upper_bound_percentage: float = 0.9,
-        src_shareholder_id: str = "1000",
+            self,
+            security_id: str = "SPY",
+            cisin: str = "US78462F1030",
+            group: str = "N1",
+            date: str = "20191028",
+            time: str = "083000",
+            reference_price: float = 10.0,
+            lower_bound_percentage: float = 0.9,
+            upper_bound_percentage: float = 0.9,
+            src_shareholder_id: str = "1000",
     ):
         self.security_id = security_id
         self.cisin = cisin
@@ -118,7 +118,7 @@ class Translator:
         if rq.order_request_type == "NewOrderRq":
             assert rq.id not in self.orders, "order %s already in order book view" % rq.id
             assert rq.id not in self.sequence_nums, "order %s already in order book view" % rq.id
-        
+
         self.orders[rq.id] = rq
         self.order_cnt += 1
         self.sequence_nums[rq.id] = self.order_cnt
@@ -135,7 +135,8 @@ class Translator:
         self.remaining_qty[rq.id] = self.remaining_qty[rq.old_id]
 
     def update_order_book_view_by_trade(self, trade: Trade) -> None:
-        assert trade.qty <= self.remaining_qty[trade.buy_id] and trade.qty <= self.remaining_qty[trade.sell_id], "not enough qty in order book view"
+        assert trade.qty <= self.remaining_qty[trade.buy_id] and trade.qty <= self.remaining_qty[
+            trade.sell_id], "not enough qty in order book view"
 
         self.trade_cnt += 1
         self.remaining_qty[trade.buy_id] -= trade.qty
@@ -147,13 +148,14 @@ class Translator:
         for queued_order in orderbook:
             self.remaining_qty[queued_order.id] = queued_order.qty
 
-    def translate_incoming_order_cmd(self, rq: OrderRq, rs: List[object], trades: List[Trade], orderbook: [OrderRq]) -> Tuple[str, List[str]]:
+    def translate_incoming_order_cmd(self, rq: OrderRq, rs: List[object], trades: List[Trade], orderbook: [OrderRq]) -> \
+            Tuple[str, List[str]]:
         order = self.translate_order(rq)
         # print(asdict(rq))
         translated_trades = []
         if rs[1] in {"Accepted", "Eliminated"}:
             self.update_order_book_view_by_order(rq, rs[1] == "Eliminated")
-            
+
             traded_qty_on_entry = 0
             assert not (rs[1] == "Eliminated" and len(trades) > 0), "Eliminated orders should not generate trades"
             for trade in trades:
@@ -192,50 +194,66 @@ class Translator:
     def _read_state(self, haskell_res: List[List[object]], rs_idx: int, request_count: int):
         orderbook_count_msg = haskell_res[rs_idx]
         rs_idx += 1
-        assert orderbook_count_msg[0] == "Orders", "line " + str(rs_idx+request_count+2) + " OrderBooks length should be declared after OrderRq but " + orderbook_count_msg[0]
+        assert orderbook_count_msg[0] == "Orders", "line " + str(
+            rs_idx + request_count + 2) + " OrderBooks length should be declared after OrderRq but " + \
+                                                   orderbook_count_msg[0]
         orderbook_count = orderbook_count_msg[1]
-        orderbook = haskell_res[rs_idx: rs_idx+orderbook_count]
+        orderbook = haskell_res[rs_idx: rs_idx + orderbook_count]
         orderbook = list(map(lambda order: OrderRq(None, None, *order[1:]), orderbook))
         rs_idx += orderbook_count
 
         credits_count_msg = haskell_res[rs_idx]
         rs_idx += 1
-        assert credits_count_msg[0] == "Credits", "line " + str(rs_idx+request_count+2) + " Credits count should be declared after OrderRq but " + credits_count_msg[0]
+        assert credits_count_msg[0] == "Credits", "line " + str(
+            rs_idx + request_count + 2) + " Credits count should be declared after OrderRq but " + credits_count_msg[0]
         credits_count = credits_count_msg[1]
         rs_idx += credits_count
 
         ownerships_count_msg = haskell_res[rs_idx]
         rs_idx += 1
-        assert ownerships_count_msg[0] == "Ownerships", "line " + str(rs_idx+request_count+2) + " Ownerships count should be declared after OrderRq but " + ownerships_count_msg[0]
+        assert ownerships_count_msg[0] == "Ownerships", "line " + str(
+            rs_idx + request_count + 2) + " Ownerships count should be declared after OrderRq but " + \
+                                                        ownerships_count_msg[0]
         ownerships_count = ownerships_count_msg[1]
         rs_idx += ownerships_count
 
         reference_price_msg = haskell_res[rs_idx]
-        assert reference_price_msg[0] == "ReferencePrice", "line " + str(rs_idx+request_count+2) + " ReferencePrice should be declared after OrderRq but " + reference_price_msg[0]
+        assert reference_price_msg[0] == "ReferencePrice", "line " + str(
+            rs_idx + request_count + 2) + " ReferencePrice should be declared after OrderRq but " + reference_price_msg[
+                                                               0]
         rs_idx += 1
 
         static_price_band_lower_limit_msg = haskell_res[rs_idx]
-        assert static_price_band_lower_limit_msg[0] == "StaticPriceBandLowerLimit", "line " + str(rs_idx+request_count+2) + " StaticPriceBandLowerLimit should be declared after OrderRq but " + reference_price_msg[0]
+        assert static_price_band_lower_limit_msg[0] == "StaticPriceBandLowerLimit", "line " + str(
+            rs_idx + request_count + 2) + " StaticPriceBandLowerLimit should be declared after OrderRq but " + \
+                                                                                    reference_price_msg[0]
         rs_idx += 1
 
         static_price_band_upper_limit_msg = haskell_res[rs_idx]
-        assert static_price_band_upper_limit_msg[0] == "StaticPriceBandUpperLimit", "line " + str(rs_idx+request_count+2) + " StaticPriceBandUpperLimit should be declared after OrderRq but " + reference_price_msg[0]
+        assert static_price_band_upper_limit_msg[0] == "StaticPriceBandUpperLimit", "line " + str(
+            rs_idx + request_count + 2) + " StaticPriceBandUpperLimit should be declared after OrderRq but " + \
+                                                                                    reference_price_msg[0]
         rs_idx += 1
 
         total_shares_msg = haskell_res[rs_idx]
-        assert total_shares_msg[0] == "TotalShares", "line " + str(rs_idx+request_count+2) + " TotalShares should be declared after OrderRq but " + reference_price_msg[0]
+        assert total_shares_msg[0] == "TotalShares", "line " + str(
+            rs_idx + request_count + 2) + " TotalShares should be declared after OrderRq but " + reference_price_msg[0]
         rs_idx += 1
 
         ownership_upper_limit_msg = haskell_res[rs_idx]
-        assert ownership_upper_limit_msg[0] == "OwnershipUpperLimit", "line " + str(rs_idx+request_count+2) + " OwnershipUpperLimit should be declared after OrderRq but " + reference_price_msg[0]
+        assert ownership_upper_limit_msg[0] == "OwnershipUpperLimit", "line " + str(
+            rs_idx + request_count + 2) + " OwnershipUpperLimit should be declared after OrderRq but " + \
+                                                                      reference_price_msg[0]
         rs_idx += 1
 
         tick_size_msg = haskell_res[rs_idx]
-        assert tick_size_msg[0] == "TickSize", "line " + str(rs_idx+request_count+2) + " TickSize should be declared after OrderRq but " + reference_price_msg[0]
+        assert tick_size_msg[0] == "TickSize", "line " + str(
+            rs_idx + request_count + 2) + " TickSize should be declared after OrderRq but " + reference_price_msg[0]
         rs_idx += 1
 
         lot_size_msg = haskell_res[rs_idx]
-        assert lot_size_msg[0] == "LotSize", "line " + str(rs_idx+request_count+2) + " LotSize should be declared after OrderRq but " + reference_price_msg[0]
+        assert lot_size_msg[0] == "LotSize", "line " + str(
+            rs_idx + request_count + 2) + " LotSize should be declared after OrderRq but " + reference_price_msg[0]
         rs_idx += 1
 
         return rs_idx, orderbook
@@ -243,9 +261,10 @@ class Translator:
     def _read_trades(self, haskell_res: List[List[object]], rs_idx: int, request_count: int):
         trades_count_msg = haskell_res[rs_idx]
         rs_idx += 1
-        assert trades_count_msg[0] == "Trades", "line " + str(rs_idx+request_count+2) + " Trades count should be declared after OrderRq but " + trades_count_msg[0]
+        assert trades_count_msg[0] == "Trades", "line " + str(
+            rs_idx + request_count + 2) + " Trades count should be declared after OrderRq but " + trades_count_msg[0]
         trades_count = trades_count_msg[1]
-        trades = haskell_res[rs_idx: rs_idx+trades_count]
+        trades = haskell_res[rs_idx: rs_idx + trades_count]
         trades = list(map(lambda trade: Trade(*trade[1:]), trades))
         rs_idx += trades_count
 
@@ -258,23 +277,27 @@ class Translator:
         translated_result = []
         rs_idx = 0
 
+        translated_feed.append(json.dumps({"command": "Change System State", "targetState": "TRADING_SESSION"}))
+        translated_feed.append(json.dumps({"timestamp": "08:30:00.000000000"}))
         for i in range(request_count):
             rq = haskell_req[i]
             rs = haskell_res[rs_idx]
             rs_idx += 1
             # print(rq)
             # print(rs)
-            assert rq[0].endswith("Rq"), "line " + str(i+2) + " request should be ended with 'Rq' " + rq[0]
-            assert rs[0].endswith("Rs"), "line " + str(rs_idx+request_count+2) + " response should be ended with 'Rs' " + rq[0]
-            assert rq[0][0:-2] == rs[0][0:-2], "line " + str(rs_idx+request_count+2) + " response should match request: %s, %s" % (rq[0], rs[0])
-            
+            assert rq[0].endswith("Rq"), "line " + str(i + 2) + " request should be ended with 'Rq' " + rq[0]
+            assert rs[0].endswith("Rs"), "line " + str(
+                rs_idx + request_count + 2) + " response should be ended with 'Rs' " + rq[0]
+            assert rq[0][0:-2] == rs[0][0:-2], "line " + str(
+                rs_idx + request_count + 2) + " response should match request: %s, %s" % (rq[0], rs[0])
+
             if rq[0].startswith("Set"):
                 assert rs[1] == "Accepted", "unsuccessful admin command " + rq[0]
-            
+
                 feed, result = self.translate_admin_cmd(rq)
                 translated_feed += feed
                 translated_result += result
-            
+
             else:
                 if rq[0] in {"NewOrderRq", "ReplaceOrderRq"}:
                     order_rq = OrderRq(*rq)
@@ -291,8 +314,8 @@ class Translator:
                     translated_result.append(result)
                 else:
                     raise RuntimeError("Invalid request type '%s'" % rq[0])
-        
-        translated_feed.append(json.dumps({"command": "End Session"}))
+
+        # translated_feed.append(json.dumps({"command": "End Session"}))
         translated_feed.append(json.dumps({"command": "Shutdown"}))
 
         return translated_feed, translated_result
@@ -315,25 +338,31 @@ class Translator:
     def get_price_band_cmds(self) -> [str]:
         return [
             json.dumps({
-                "command": "Suspend Instrument",
-                "securities": [self.security_id],
+                "command": "Change Security State",
+                "items": [self.security_id],
+                "groupName": None,
+                "targetState": "SURVEILLANCE"
             }),
             json.dumps({
-                "command": "Change Static Price Band",
-                "staticPriceBandData": {
-                    "lowerBoundPercentage": self.lower_bound_percentage,
-                    "upperBoundPercentage": self.upper_bound_percentage,
-                    "referencePrice": self.reference_price,
-                    "securityId": self.security_id,
-                },
+                "command": "Change Security Static Price Band",
+                "items": [self.security_id],
+                "priceBandPercentage":
+                    {"upperBound": self.upper_bound_percentage * 100,
+                     "lowerBound": self.lower_bound_percentage * 100},
+                "referencePrice": self.reference_price,
+                "groupCode": None
             }),
             json.dumps({
-                "command": "Reserve Instrument",
-                "securities": [self.security_id],
+                "command": "Change Security State",
+                "items": [self.security_id],
+                "groupName": None,
+                "targetState": "RESERVED"
             }),
             json.dumps({
-                "command": "Open Instrument",
-                "securities": [self.security_id],
+                "command": "Change Security State",
+                "items": [self.security_id],
+                "groupName": None,
+                "targetState": "OPENED"
             }),
         ]
 
@@ -410,7 +439,8 @@ class Translator:
         return "".join([
             ("%d=" % rq.id).ljust(16),
             "0144",
-            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002", "CancelOrderRq": "0003"}.get(rq.order_request_type, "0000"),
+            {"NewOrderRq": "0001", "ReplaceOrderRq": "0002", "CancelOrderRq": "0003"}.get(rq.order_request_type,
+                                                                                          "0000"),
             "%06d" % 0,
             "".ljust(71),
         ])
@@ -433,7 +463,12 @@ class Translator:
             "%06d" % self.sequence_nums[rq.id],  # HON
             order_status,  # status
             str(self.security_id).ljust(12),
-            "%012d" % rq.qty,  # qty
+            {
+                "NewOrderRq": "%012d" % rq.qty,
+                "ReplaceOrderRq": "%012d" % rq.qty,
+                "CancelOrderRq": "%012d" % self.previous_remaining_qty[rq.old_id],
+            }.get(rq.order_request_type, "%012d" % 0),  # qty
+            # "%012d" % rq.qty,  # qty
             {"BUY": "A", "SELL": "V", "CROSS": "2"}.get(rq.side, " "),  # side
             self.translate_price_to_mmtp(rq.price),  # price
             str(rq.broker).ljust(8),  # broker
@@ -449,11 +484,19 @@ class Translator:
             {
                 "NewOrderRq": "%08d" % 0,
                 "ReplaceOrderRq": self.date,
-                "CancelOrderRq": self.date,
+                "CancelOrderRq": "%08d" % 0,
             }.get(rq.order_request_type, "%08d" % 0),  # original order date
-            "%06d" % self.sequence_nums.get(rq.old_id, 0),  # original HON
+            {
+                "NewOrderRq": "%06d" % 0,
+                "ReplaceOrderRq": "%06d" % self.sequence_nums.get(rq.old_id, 0),
+                "CancelOrderRq": "%06d" % 0,
+            }.get(rq.order_request_type, "%06d" % 0),  # original HON
             {True: "E", False: "J"}.get(rq.fak, " "),  # validity type
-            "%08d" % 0,  # validity date
+            {
+                "NewOrderRq": "%08d" % 0,
+                "ReplaceOrderRq": "%08d" % 0,
+                "CancelOrderRq": self.date,
+            }.get(rq.order_request_type, "%08d" % 0),  # validity date
             "%012d" % rq.min_qty,  # min qty
             "%012d" % (rq.disclodes_qty if rq.order_type == "Iceberg" else 0),  # disclosed qty
             "A",  # technical origin
@@ -461,7 +504,7 @@ class Translator:
             "%012d" % {
                 "NewOrderRq": 0,
                 "ReplaceOrderRq": self.previous_remaining_qty.get(rq.old_id, 0),
-                "CancelOrderRq": self.previous_remaining_qty.get(rq.old_id, 0),
+                "CancelOrderRq": 0,
             }.get(rq.order_request_type, 0),  # original remaining qty
             " %09d" % 0,  # trigger price
             "%06d" % 0,
